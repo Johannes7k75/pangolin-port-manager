@@ -1,0 +1,92 @@
+{{if .IsApplying}}
+<div class="status-bar status-bar-pending" id="applying-banner" data-applying="true" role="status">
+  <div class="status-bar-left">
+    <span class="spinner" style="margin-top:3px;border-top-color:var(--amber);"></span>
+    <div>
+      <span class="status-title">Applying changes...</span>
+      <span class="status-sub">Recreating gerbil and traefik containers — proxy connection will automatically reconnect</span>
+    </div>
+  </div>
+</div>
+
+{{else if and .LastApplyResult (not .LastApplyResult.Success)}}
+<div class="status-bar status-bar-error" role="alert">
+  <div class="status-bar-left">
+    <span class="status-dot status-dot-red"></span>
+    <div>
+      <div>
+        <span class="status-title">Apply failed</span>
+        <span class="status-sub">Docker Compose returned an error while updating containers</span>
+      </div>
+      <div class="status-error-detail">{{.LastApplyResult.Error}}</div>
+      {{if .LastApplyResult.Output}}
+      <pre class="log-drawer">{{.LastApplyResult.Output}}</pre>
+      {{end}}
+    </div>
+  </div>
+
+  <button
+    id="apply-btn"
+    type="button"
+    hx-post="/api/apply"
+    hx-target="#status-banner"
+    hx-indicator="#apply-spinner"
+    class="btn btn-danger">
+    <span id="apply-spinner" class="spinner htmx-indicator"></span>
+    <span>Retry apply</span>
+  </button>
+</div>
+
+{{else if .HasPendingChanges}}
+<div class="status-bar status-bar-pending" role="status">
+  <div class="status-bar-left">
+    <span class="status-dot status-dot-amber"></span>
+    <div>
+      <span class="status-title">Unapplied changes</span>
+      <span class="status-sub">Recreate gerbil and traefik to bind updated host ports and entrypoints</span>
+    </div>
+  </div>
+
+  <button
+    id="apply-btn"
+    type="button"
+    hx-post="/api/apply"
+    hx-target="#status-banner"
+    hx-indicator="#apply-spinner"
+    class="btn btn-warning">
+    <span id="apply-spinner" class="spinner htmx-indicator"></span>
+    <span>Apply changes</span>
+  </button>
+</div>
+
+{{else}}
+<div class="status-bar status-bar-synced" role="status">
+  <div class="status-bar-left">
+    <span class="status-dot status-dot-green"></span>
+    <div>
+      <span class="status-title">Synced</span>
+      <span class="status-sub">
+        {{if .LastAppliedAt}}
+          Last applied {{.LastAppliedAt.Format "2006-01-02 15:04:05 UTC"}}
+        {{else}}
+          docker-compose.ports.yml matches active port rules
+        {{end}}
+      </span>
+    </div>
+  </div>
+
+  {{if and .LastApplyResult .LastApplyResult.Output}}
+  <button
+    type="button"
+    onclick="document.getElementById('apply-log-details').classList.toggle('hidden')"
+    class="btn btn-sm btn-secondary">
+    Logs
+  </button>
+  {{end}}
+</div>
+
+{{if and .LastApplyResult .LastApplyResult.Output}}
+<pre id="apply-log-details" class="log-drawer hidden">{{.LastApplyResult.Output}}</pre>
+{{end}}
+
+{{end}}

@@ -1,0 +1,12 @@
+<div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+    <span class="field-hint" style="margin:0;">Output path: <code class="mono-code">{{.FilePath}}</code></span>
+    <button
+      type="button"
+      onclick="copyToClipboard(document.getElementById('yaml-code-content').innerText, this)"
+      class="btn btn-sm btn-secondary">
+      Copy
+    </button>
+  </div>
+  <pre id="yaml-code-content" class="code-block"><code>{{.Content}}</code></pre>
+</div>

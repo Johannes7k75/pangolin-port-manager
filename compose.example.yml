@@ -1,0 +1,96 @@
+name: pangolin-stack
+
+services:
+  # Pangolin Management Server
+  pangolin:
+    image: fosrl/pangolin:latest
+    container_name: pangolin
+    restart: unless-stopped
+    volumes:
+      - ./config:/app/config
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/v1/"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+
+  # Gerbil Network Gateway (WireGuard + Published Ports)
+  gerbil:
+    image: fosrl/gerbil:latest
+    container_name: gerbil
+    restart: unless-stopped
+    depends_on:
+      pangolin:
+        condition: service_healthy
+    command:
+      - --reachableAt=http://gerbil:3003
+      - --generateAndSaveKeyTo=/var/config/key
+      - --remoteConfig=http://pangolin:3001/api/v1/
+    volumes:
+      - ./config/:/var/config
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    ports:
+      - "51820:51820/udp" # WireGuard
+      - "21820:21820/udp" # Relay
+      - "80:80"           # HTTP (Traefik)
+      - "443:443"         # HTTPS (Traefik)
+      # Dynamic TCP/UDP ports are injected here by docker-compose.ports.yml
+
+  # Traefik Reverse Proxy (shares Gerbil's network namespace)
+  traefik:
+    image: docker.io/traefik:v3.7
+    container_name: pp-traefik
+    network_mode: service:gerbil
+    depends_on:
+      pangolin:
+        condition: service_healthy
+    command:
+      - --configFile=/etc/traefik/traefik_config.yml
+      - --api.insecure=true
+      - --api.dashboard=true
+      # Dynamic entryPoints flags are injected here by docker-compose.ports.yml
+    environment:
+      - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN:-}
+    volumes:
+      - ./config/traefik:/etc/traefik:ro
+      - ./config/letsencrypt:/letsencrypt
+      - ./config/traefik/logs:/var/log/traefik
+      - ./config/traefik/rules:/rules
+      - ./config/traefik/dynamic_config.yml:/rules/dynamic_config.yml
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+  # Pangolin Port Provisioner (This Service)
+  pangolin-provision:
+    build: .
+    container_name: pangolin-provision
+    restart: unless-stopped
+    environment:
+      - PORT=8080
+      - COMPOSE_PROJECT_DIR=/compose
+      - COMPOSE_OUT_PATH=/compose/docker-compose.ports.yml
+      - COMPOSE_FILES=compose.example.yml,docker-compose.yml,compose.yml,docker-compose.ports.yml
+      - GERBIL_SERVICE_NAME=gerbil
+      - TRAEFIK_SERVICE_NAME=traefik
+      - TRAEFIK_BASE_COMMANDS=--configFile=/etc/traefik/traefik_config.yml,--api.insecure=true,--api.dashboard=true
+    volumes:
+      - ./data/provisioner:/data
+      - .:/compose
+      - /var/run/docker.sock:/var/run/docker.sock
+    labels:
+      - "traefik.enable=true"
+      # Expose provisioner web UI via Traefik & Pangolin auth:
+      - "traefik.http.routers.provisioner.rule=Host(`ports.yourdomain.com`)"
+      - "traefik.http.routers.provisioner.entrypoints=websecure"
+      - "traefik.http.routers.provisioner.tls.certresolver=letsencrypt"
+      - "traefik.http.services.provisioner.loadbalancer.server.port=8080"
+      # Attach Pangolin authentication forward-auth middleware if configured:
+      # - "traefik.http.routers.provisioner.middlewares=pangolin-auth@docker"
+
+networks:
+  default:
+    driver: bridge
+    name: pangolin
+    enable_ipv6: true

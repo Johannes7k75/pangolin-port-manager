@@ -1,0 +1,32 @@
+# Pangolin Configuration (https://docs.pangolin.net/self-host/advanced/config-file)
+gerbil:
+  start_port: 51820
+  base_endpoint: "pangolin.example.com" # Hostname/IP clients connect to
+
+app:
+  dashboard_url: "http://pangolin.example.com" # Dashboard URL matching your Host header
+  log_level: "info"
+
+telemetry:
+  anonymous_usage: false
+
+domains:
+  domain1:
+    base_domain: "example.com"
+    cert_resolver: "letsencrypt"
+
+server:
+  # Secret must be at least 32 characters long
+  secret: "change-this-to-a-very-secure-random-32-char-secret-here"
+
+cors:
+  origins: ["http://pangolin.example.com", "https://pangolin.example.com"]
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH"]
+  allowed_headers: ["X-CSRF-Token", "Content-Type"]
+  credentials: false
+
+flags:
+  require_email_verification: false
+  disable_signup_without_invite: false
+  disable_user_create_org: false
+  allow_raw_resources: true

@@ -1,0 +1,8 @@
+bin/
+data/
+docker-compose.ports.yml
+*.tmp
+.DS_Store
+config/
+*.log
+

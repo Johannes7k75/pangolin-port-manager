@@ -1,0 +1,78 @@
+{{if eq (len .Ports) 0}}
+<div class="empty-state">
+  <p class="empty-state-title">No port mappings configured</p>
+  <p class="empty-state-sub">Add a TCP or UDP port to expose it on Gerbil and register a Traefik entrypoint.</p>
+  <button type="button" onclick="openAddModal()" class="btn btn-secondary">
+    Add port
+  </button>
+</div>
+{{else}}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Port</th>
+      <th>Entrypoint</th>
+      <th>Name</th>
+      <th>Resource</th>
+      <th>Status</th>
+      <th class="text-right">Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Ports}}
+    <tr data-rule-id="{{.ID}}">
+      <td class="mono-code">{{.Port}}/{{.Protocol}}</td>
+      <td><span class="entrypoint-tag">{{.Protocol}}-{{.Port}}</span></td>
+      <td>{{.Name}}</td>
+      <td>
+        {{if .PangolinResourceID}}
+        <span class="resource-tag">{{.PangolinResourceID}}</span>
+        {{else}}
+        <span class="resource-tag" style="color: var(--text-muted)">—</span>
+        {{end}}
+      </td>
+      <td>
+        {{if .Enabled}}
+        <span class="badge badge-active">Active</span>
+        {{else}}
+        <span class="badge badge-disabled">Disabled</span>
+        {{end}}
+      </td>
+      <td class="text-right">
+        <div class="row-actions">
+          <button
+            type="button"
+            class="btn btn-sm btn-secondary edit-rule-btn"
+            data-id="{{.ID}}"
+            data-name="{{.Name}}"
+            data-port="{{.Port}}"
+            data-protocol="{{.Protocol}}"
+            data-resource="{{.PangolinResourceID}}"
+            data-enabled="{{.Enabled}}"
+            onclick="openEditModal(this)">
+            Edit
+          </button>
+
+          <button
+            type="button"
+            hx-post="/api/ports/{{.ID}}/toggle"
+            hx-target="#ports-container"
+            class="btn btn-sm btn-secondary toggle-rule-btn">
+            {{if .Enabled}}Disable{{else}}Enable{{end}}
+          </button>
+
+          <button
+            type="button"
+            hx-delete="/api/ports/{{.ID}}"
+            hx-confirm="Delete port mapping '{{.Name}}' ({{.Port}}/{{.Protocol}})?"
+            hx-target="#ports-container"
+            class="btn btn-sm btn-ghost-danger delete-rule-btn">
+            Delete
+          </button>
+        </div>
+      </td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{end}}

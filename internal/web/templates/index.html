@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pangolin Ports</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/htmx.min.js"></script>
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <div class="breadcrumb">
+        <span class="breadcrumb-org">pangolin</span>
+        <span class="breadcrumb-sep">/</span>
+        <span class="breadcrumb-title">ports</span>
+      </div>
+
+      <div class="topbar-actions">
+        <button
+          type="button"
+          id="btn-compose-preview"
+          hx-get="/partials/yaml-preview"
+          hx-target="#yaml-modal-content"
+          onclick="openModal('yaml-modal')"
+          class="btn btn-secondary">
+          Compose YAML
+        </button>
+
+        <button
+          type="button"
+          id="btn-open-add"
+          onclick="openAddModal()"
+          class="btn btn-primary">
+          Add port
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container main-content">
+    <div id="status-banner">
+      {{template "status_banner.html" .}}
+    </div>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div class="panel-title-group">
+          <h2 class="panel-title">Port mappings</h2>
+          <span id="ports-count" class="badge badge-neutral">{{len .Ports}}</span>
+        </div>
+      </div>
+
+      <div id="ports-container">
+        {{template "port_list.html" .}}
+      </div>
+    </section>
+  </main>
+
+  <!-- Add Port Modal -->
+  <div id="add-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="add-modal-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="add-modal-title" class="modal-title">Add port mapping</h3>
+        <button type="button" class="modal-close" onclick="closeModal('add-modal')" aria-label="Close">&times;</button>
+      </div>
+
+      <form
+        id="add-port-form"
+        hx-post="/api/ports"
+        hx-target="#ports-container"
+        hx-swap="innerHTML">
+        <div class="modal-body">
+          <div id="form-error"></div>
+
+          <div>
+            <label class="field-label" for="add-name">Name</label>
+            <input
+              id="add-name"
+              type="text"
+              name="name"
+              placeholder="Minecraft"
+              required
+              class="field-input" />
+          </div>
+
+          <div class="form-row-2">
+            <div>
+              <label class="field-label" for="add-port">Port</label>
+              <input
+                id="add-port"
+                type="number"
+                name="port"
+                min="1"
+                max="65535"
+                placeholder="25565"
+                required
+                class="field-input mono-code" />
+            </div>
+
+            <div>
+              <label class="field-label" for="add-protocol">Protocol</label>
+              <select id="add-protocol" name="protocol" class="field-select mono-code">
+                <option value="tcp" selected>tcp</option>
+                <option value="udp">udp</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="field-label" for="add-resource">Pangolin resource ID (optional)</label>
+            <input
+              id="add-resource"
+              type="text"
+              name="pangolin_resource_id"
+              placeholder="mc-survival"
+              class="field-input mono-code" />
+          </div>
+
+          <label class="checkbox-row" for="add-enabled">
+            <input id="add-enabled" type="checkbox" name="enabled" value="true" checked />
+            <span>Enable rule</span>
+          </label>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" onclick="closeModal('add-modal')" class="btn btn-secondary">Cancel</button>
+          <button type="submit" id="add-submit-btn" class="btn btn-primary">Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Edit Port Modal -->
+  <div id="edit-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="edit-modal-title" class="modal-title">Edit port mapping</h3>
+        <button type="button" class="modal-close" onclick="closeModal('edit-modal')" aria-label="Close">&times;</button>
+      </div>
+
+      <form
+        id="edit-port-form"
+        hx-post="/api/ports/"
+        hx-target="#ports-container"
+        hx-swap="innerHTML">
+        <div class="modal-body">
+          <div id="edit-form-error"></div>
+
+          <div>
+            <label class="field-label" for="edit-name">Name</label>
+            <input
+              id="edit-name"
+              type="text"
+              name="name"
+              required
+              class="field-input" />
+          </div>
+
+          <div class="form-row-2">
+            <div>
+              <label class="field-label" for="edit-port">Port</label>
+              <input
+                id="edit-port"
+                type="number"
+                name="port"
+                min="1"
+                max="65535"
+                required
+                class="field-input mono-code" />
+            </div>
+
+            <div>
+              <label class="field-label" for="edit-protocol">Protocol</label>
+              <select id="edit-protocol" name="protocol" class="field-select mono-code">
+                <option value="tcp">tcp</option>
+                <option value="udp">udp</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="field-label" for="edit-resource">Pangolin resource ID (optional)</label>
+            <input
+              id="edit-resource"
+              type="text"
+              name="pangolin_resource_id"
+              placeholder="mc-survival"
+              class="field-input mono-code" />
+          </div>
+
+          <label class="checkbox-row" for="edit-enabled">
+            <input id="edit-enabled" type="checkbox" name="enabled" value="true" />
+            <span>Enable rule</span>
+          </label>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" onclick="closeModal('edit-modal')" class="btn btn-secondary">Cancel</button>
+          <button type="submit" id="edit-submit-btn" class="btn btn-primary">Save changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- YAML Preview Modal -->
+  <div id="yaml-modal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal-card modal-card-lg">
+      <div class="modal-header">
+        <h3 class="modal-title">docker-compose.ports.yml</h3>
+        <button type="button" class="modal-close" onclick="closeModal('yaml-modal')" aria-label="Close">&times;</button>
+      </div>
+
+      <div id="yaml-modal-content" class="modal-body">
+        <div>Loading...</div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" onclick="closeModal('yaml-modal')" class="btn btn-secondary">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Allow HTMX to swap 400/422 validation errors into #form-error / #edit-form-error
+    document.body.addEventListener('htmx:beforeSwap', function(evt) {
+      if (evt.detail.xhr.status === 422 || evt.detail.xhr.status === 400) {
+        evt.detail.shouldSwap = true;
+        evt.detail.isError = false;
+      }
+    });
+
+    // Close modals only when the backend explicitly confirms a successful save
+    document.body.addEventListener('portSaved', function() {
+      closeModal('add-modal');
+      closeModal('edit-modal');
+      var addForm = document.getElementById('add-port-form');
+      if (addForm) addForm.reset();
+    });
+
+    // Resilient background poller while Gerbil & Traefik restart underneath the active proxy connection
+    var applyPollTimer = null;
+    function pollApplyCompletion() {
+      if (applyPollTimer) clearTimeout(applyPollTimer);
+      applyPollTimer = setTimeout(function() {
+        fetch('/partials/status-banner', { cache: 'no-store' })
+          .then(function(resp) {
+            if (!resp.ok) throw new Error('proxy restarting');
+            return resp.text();
+          })
+          .then(function(html) {
+            var banner = document.getElementById('status-banner');
+            if (banner) {
+              banner.innerHTML = html;
+              if (window.htmx) htmx.process(banner);
+            }
+            if (html.indexOf('data-applying="true"') !== -1) {
+              pollApplyCompletion();
+            }
+          })
+          .catch(function() {
+            // Network reset / 502 is expected while Gerbil & Traefik recreate; keep polling
+            pollApplyCompletion();
+          });
+      }, 450);
+    }
+
+    document.body.addEventListener('applyStarted', function() {
+      pollApplyCompletion();
+    });
+
+    function openModal(id) {
+      document.getElementById(id).classList.remove('hidden');
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.add('hidden');
+    }
+
+    function openAddModal() {
+      document.getElementById('form-error').innerHTML = '';
+      openModal('add-modal');
+      setTimeout(function() {
+        document.getElementById('add-name').focus();
+      }, 20);
+    }
+
+    function openEditModal(btn) {
+      document.getElementById('edit-form-error').innerHTML = '';
+      var id = btn.getAttribute('data-id');
+      var name = btn.getAttribute('data-name');
+      var port = btn.getAttribute('data-port');
+      var protocol = btn.getAttribute('data-protocol');
+      var resource = btn.getAttribute('data-resource') || '';
+      var enabled = btn.getAttribute('data-enabled') === 'true';
+
+      var form = document.getElementById('edit-port-form');
+      form.setAttribute('hx-post', '/api/ports/' + id);
+      htmx.process(form);
+
+      document.getElementById('edit-name').value = name;
+      document.getElementById('edit-port').value = port;
+      document.getElementById('edit-protocol').value = protocol;
+      document.getElementById('edit-resource').value = resource;
+      document.getElementById('edit-enabled').checked = enabled;
+
+      openModal('edit-modal');
+    }
+
+    function copyToClipboard(text, btn) {
+      navigator.clipboard.writeText(text);
+      if (btn) {
+        var orig = btn.innerText;
+        btn.innerText = 'Copied';
+        setTimeout(function() { btn.innerText = orig; }, 1500);
+      }
+    }
+  </script>
+</body>
+</html>
