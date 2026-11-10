@@ -54,6 +54,9 @@ services:
 	mockDockerPath := filepath.Join(tempDir, "mock-docker.sh")
 	mockScript := `#!/usr/bin/env bash
 set -e
+if [ "$1" = "inspect" ]; then
+  exit 1
+fi
 args=()
 for arg in "$@"; do
   if [ "$arg" = "up" ]; then
@@ -74,17 +77,17 @@ echo "Container pp-traefik Recreated"
 	composeOutPath := filepath.Join(tempDir, "docker-compose.ports.yml")
 
 	cfg := &config.Config{
-		Port:                "8080",
-		DataDir:             filepath.Join(tempDir, "data"),
-		PortsFilePath:       portsFilePath,
-		ComposeOutPath:      composeOutPath,
-		ComposeProjectDir:   tempDir,
-		ComposeFiles:        []string{"compose.example.yml"},
-		GerbilServiceName:   "gerbil",
-		TraefikServiceName:  "traefik",
-		TraefikBaseCommands: []string{"--configFile=/etc/traefik/traefik_config.yml", "--api.dashboard=true"},
-		DockerBin:           mockDockerPath,
+		Port:               "8080",
+		DataDir:            filepath.Join(tempDir, "data"),
+		PortsFilePath:      portsFilePath,
+		ComposeOutPath:     composeOutPath,
+		ComposeProjectDir:  tempDir,
+		ComposeFiles:       []string{"compose.example.yml"},
+		GerbilServiceName:  "gerbil",
+		TraefikServiceName: "traefik",
+		DockerBin:          mockDockerPath,
 	}
+	cfg.ReloadTraefikBaseCommands()
 
 	store, err := storage.NewStore(portsFilePath)
 	if err != nil {

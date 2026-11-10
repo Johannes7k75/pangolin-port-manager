@@ -152,39 +152,10 @@ func (c *Client) resolveComposeFiles(effectiveProjectDir string) []string {
 	var found []string
 	portsBaseName := filepath.Base(c.cfg.ComposeOutPath)
 
-	findBase := func(filePath string) bool {
-		if filePath == portsBaseName || filePath == c.cfg.ComposeOutPath {
-			return false
-		}
-		baseName := filepath.Base(filePath)
-		absPath := filepath.Join(effectiveProjectDir, baseName)
-		if _, err := os.Stat(absPath); err == nil {
-			sanitizeBaseComposeFile(absPath, portsBaseName)
-			found = append(found, absPath)
-			return true
-		}
-		return false
-	}
-
-	for _, f := range c.cfg.ComposeFiles {
-		if findBase(f) {
-			break
-		}
-	}
-
-	if len(found) == 0 {
-		candidates := []string{
-			"compose.example.yml",
-			"docker-compose.yml",
-			"compose.yml",
-			"compose.yaml",
-			"docker-compose.yaml",
-		}
-		for _, cand := range candidates {
-			if findBase(cand) {
-				break
-			}
-		}
+	baseFile := config.FindBaseComposeFile(effectiveProjectDir, c.cfg.ComposeFiles, c.cfg.ComposeOutPath)
+	if baseFile != "" {
+		sanitizeBaseComposeFile(baseFile, portsBaseName)
+		found = append(found, baseFile)
 	}
 
 	portsInDir := filepath.Join(effectiveProjectDir, portsBaseName)
@@ -270,6 +241,7 @@ func (c *Client) executeComposeRecreate(ctx context.Context) (*ApplyResult, erro
 // Apply writes the compose ports file and synchronously executes docker compose recreate
 func (c *Client) Apply(ctx context.Context, rules []models.PortRule) (*ApplyResult, error) {
 	c.mu.Lock()
+	c.cfg.ReloadTraefikBaseCommands()
 	log.Printf("[Docker] Writing compose override file to %s (%d total rules)", c.cfg.ComposeOutPath, len(rules))
 	if err := WriteComposeFile(rules, c.cfg); err != nil {
 		log.Printf("[Docker] Failed to write compose file: %v", err)
@@ -310,6 +282,7 @@ func (c *Client) StartApplyAsync(rules []models.PortRule, delay time.Duration) e
 		return nil
 	}
 
+	c.cfg.ReloadTraefikBaseCommands()
 	log.Printf("[Docker] Writing compose override file to %s (%d total rules)", c.cfg.ComposeOutPath, len(rules))
 	if err := WriteComposeFile(rules, c.cfg); err != nil {
 		log.Printf("[Docker] Failed to write compose file: %v", err)

@@ -57,7 +57,6 @@ services:
       - COMPOSE_FILES=compose.yml,docker-compose.ports.yml
       - GERBIL_SERVICE_NAME=gerbil
       - TRAEFIK_SERVICE_NAME=traefik
-      - TRAEFIK_BASE_COMMANDS=--configFile=/etc/traefik/traefik_config.yml,--api.insecure=true,--api.dashboard=true
     volumes:
       - ./data/provisioner:/data
       - .:/compose
@@ -141,8 +140,7 @@ services:
 | `COMPOSE_OUT_PATH` | `./docker-compose.ports.yml` | Output path for the generated Compose override file |
 | `COMPOSE_FILES` | `compose.yml,docker-compose.ports.yml` | Comma-separated list of compose files passed with `-f` |
 | `GERBIL_SERVICE_NAME` | `gerbil` | Name of the Gerbil service in your Compose configuration |
-| `TRAEFIK_SERVICE_NAME` | `traefik` | Name of the Traefik service in your Compose configuration |
-| `TRAEFIK_BASE_COMMANDS` | `--configFile=...,--api.insecure=true...` | Base static Traefik CLI arguments to preserve |
+| `TRAEFIK_SERVICE_NAME` | `traefik` | Name of the Traefik service in your Compose configuration (base command arguments are automatically extracted from your base compose file) |
 
 ---
 

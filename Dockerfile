@@ -3,7 +3,9 @@ FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS builder
 
 WORKDIR /src
 
-COPY go.mod ./
+COPY go.mod go.sum* ./
+RUN go mod download
+
 COPY cmd/ ./cmd/
 COPY internal/ ./internal/
 
@@ -36,8 +38,7 @@ ENV PORT=8080 \
     COMPOSE_OUT_PATH=/compose/docker-compose.ports.yml \
     COMPOSE_FILES=docker-compose.yml,docker-compose.ports.yml \
     GERBIL_SERVICE_NAME=gerbil \
-    TRAEFIK_SERVICE_NAME=traefik \
-    TRAEFIK_BASE_COMMANDS="--configFile=/etc/traefik/traefik_config.yml,--api.insecure=true,--api.dashboard=true"
+    TRAEFIK_SERVICE_NAME=traefik
 
 EXPOSE 8080
 

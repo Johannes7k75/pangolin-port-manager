@@ -79,6 +79,7 @@ func WriteComposeFile(rules []models.PortRule, cfg *config.Config) error {
 
 // HasPendingChanges compares the current file on disk with the expected generated YAML
 func HasPendingChanges(rules []models.PortRule, cfg *config.Config) bool {
+	cfg.ReloadTraefikBaseCommands()
 	existing, err := os.ReadFile(cfg.ComposeOutPath)
 	if err != nil {
 		// File does not exist yet; if there are rules (or even defaults), treat as pending

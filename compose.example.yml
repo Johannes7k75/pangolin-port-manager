@@ -74,7 +74,6 @@ services:
       - COMPOSE_FILES=compose.example.yml,docker-compose.yml,compose.yml,docker-compose.ports.yml
       - GERBIL_SERVICE_NAME=gerbil
       - TRAEFIK_SERVICE_NAME=traefik
-      - TRAEFIK_BASE_COMMANDS=--configFile=/etc/traefik/traefik_config.yml,--api.insecure=true,--api.dashboard=true
     volumes:
       - ./data/provisioner:/data
       - .:/compose

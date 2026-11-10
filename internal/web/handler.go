@@ -193,6 +193,7 @@ func (s *Server) handleStatusBannerPartial(w http.ResponseWriter, r *http.Reques
 
 func (s *Server) handleYamlPreviewPartial(w http.ResponseWriter, r *http.Request) {
 	ports := s.store.List()
+	s.cfg.ReloadTraefikBaseCommands()
 	yaml := docker.GenerateComposeYAML(ports, s.cfg)
 	data := YamlPreviewData{
 		FilePath: s.cfg.ComposeOutPath,
