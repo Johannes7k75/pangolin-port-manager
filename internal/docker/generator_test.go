@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"pangolin-provision/internal/config"
-	"pangolin-provision/internal/models"
+	"pangolin-port-manager/internal/config"
+	"pangolin-port-manager/internal/models"
 )
 
 func TestGenerateComposeYAML(t *testing.T) {

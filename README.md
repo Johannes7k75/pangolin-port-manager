@@ -1,4 +1,4 @@
-# Pangolin Port Provisioner
+# Pangolin Port Manager
 
 A lightweight Go microservice with an embedded Web UI (HTMX + custom dark mode aesthetic matching Pangolin) designed to sit behind Pangolin authentication to manage raw TCP/UDP port exposure on Gerbil and Traefik entrypoints.
 
@@ -10,7 +10,7 @@ In a Pangolin stack, Traefik shares Gerbil's network stack via `network_mode: se
 1. **All host port forwards must be defined on Gerbil** (`ports: ["25565:25565/tcp"]`).
 2. **Traefik requires static CLI flags or entrypoints** to bind listeners to those ports (`--entryPoints.tcp-25565.address=:25565/tcp`).
 
-Pangolin Provisioner automates this workflow:
+Pangolin Port Manager automates this workflow:
 - Provides a clean, responsive dark-mode Web UI to manage your TCP and UDP ports.
 - Generates an isolated compose override file (`docker-compose.ports.yml`).
 - Automatically detects drift between your configured rules and the applied compose file.
@@ -18,7 +18,7 @@ Pangolin Provisioner automates this workflow:
 
 ```mermaid
 flowchart TD
-    User["Web Browser (Behind Pangolin Auth)"] -->|Add / Edit / Toggle / Delete Port| Provisioner["Pangolin Provisioner (:8080)"]
+    User["Web Browser (Behind Pangolin Auth)"] -->|Add / Edit / Toggle / Delete Port| Provisioner["Pangolin Port Manager (:8080)"]
     Provisioner -->|Generates & Writes| ComposeOverride["docker-compose.ports.yml"]
     Provisioner -->|Click Apply| DockerSocket["/var/run/docker.sock"]
     DockerSocket -->|Recreates --no-deps| Gerbil["gerbil (ports: 25565:25565/tcp)"]
@@ -29,17 +29,17 @@ flowchart TD
 
 ## 🚀 Quick Start
 
-### 1. Add `pangolin-provision` to your `compose.yml`
+### 1. Add `pangolin-port-manager` to your `compose.yml`
 
-In your Pangolin stack's compose file (e.g., `compose.yml` or `compose.example.yml`), add the `pangolin-provision` service:
+In your Pangolin stack's compose file (e.g., `compose.yml` or `compose.example.yml`), add the `pangolin-port-manager` service:
 
 ```yaml
 services:
   # ... your existing pangolin, gerbil, and traefik services ...
 
-  pangolin-provision:
-    build: . # or image: ghcr.io/your-user/pangolin-provision:latest
-    container_name: pangolin-provision
+  pangolin-port-manager:
+    build: . # or image: ghcr.io/your-user/pangolin-port-manager:latest
+    container_name: pangolin-port-manager
     restart: unless-stopped
     environment:
       - PORT=8080
@@ -86,10 +86,10 @@ volumes:
 Persists the application state (`ports.json`) containing your port definitions, names, protocols, and enabled/disabled states across container rebuilds.
 
 ### Why `.:/compose`?
-The `docker compose` CLI runs **inside** the `pangolin-provision` container and communicates with the host's Docker daemon via `/var/run/docker.sock`. 
+The `docker compose` CLI runs **inside** the `pangolin-port-manager` container and communicates with the host's Docker daemon via `/var/run/docker.sock`. 
 1. **Reading the Base Config**: The CLI inside the container needs to read `compose.yml` to know how `gerbil` and `traefik` are configured.
 2. **Writing the Override**: The provisioner needs to write `docker-compose.ports.yml` to the directory on the host so both the container and future host commands can access it.
-3. **Resolving Relative Paths**: When Docker Compose recreates `gerbil`, it resolves relative volume paths (like `./config:/var/config`). `pangolin-provision` automatically inspects its own mounts to detect your host project path and preserves correct host path resolution.
+3. **Resolving Relative Paths**: When Docker Compose recreates `gerbil`, it resolves relative volume paths (like `./config:/var/config`). `pangolin-port-manager` automatically inspects its own mounts to detect your host project path and preserves correct host path resolution.
 
 #### Prefer not to mount the whole `.` directory?
 If you want to restrict container filesystem access, you can mount only a dedicated subfolder or specific files:
@@ -141,8 +141,8 @@ Pre-built multi-arch (`linux/amd64`, `linux/arm64`) images are built and publish
 
 ```yaml
 services:
-  pangolin-provision:
-    image: ghcr.io/<your-github-username>/pangolin-provision:latest
+  pangolin-port-manager:
+    image: ghcr.io/<your-github-username>/pangolin-port-manager:latest
 ```
 
 The GitHub Actions workflow [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml):

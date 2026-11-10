@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"pangolin-provision/internal/config"
-	"pangolin-provision/internal/docker"
-	"pangolin-provision/internal/storage"
+	"pangolin-port-manager/internal/config"
+	"pangolin-port-manager/internal/docker"
+	"pangolin-port-manager/internal/storage"
 )
 
 func setupTestServer(t *testing.T) (*Server, *storage.Store) {

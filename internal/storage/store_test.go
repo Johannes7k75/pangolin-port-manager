@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"pangolin-provision/internal/models"
+	"pangolin-port-manager/internal/models"
 )
 
 func setupTestStore(t *testing.T) (*Store, string) {

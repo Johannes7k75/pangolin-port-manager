@@ -12,11 +12,11 @@ import (
 	"strings"
 	"testing"
 
-	"pangolin-provision/internal/config"
-	"pangolin-provision/internal/docker"
-	"pangolin-provision/internal/models"
-	"pangolin-provision/internal/storage"
-	"pangolin-provision/internal/web"
+	"pangolin-port-manager/internal/config"
+	"pangolin-port-manager/internal/docker"
+	"pangolin-port-manager/internal/models"
+	"pangolin-port-manager/internal/storage"
+	"pangolin-port-manager/internal/web"
 )
 
 // setupMockEnvironment prepares a complete temporary directory mimicking the full Pangolin stack,

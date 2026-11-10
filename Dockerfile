@@ -9,7 +9,7 @@ COPY internal/ ./internal/
 
 ARG TARGETOS
 ARG TARGETARCH
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -ldflags="-s -w" -o /pangolin-provision ./cmd/server
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -ldflags="-s -w" -o /pangolin-port-manager ./cmd/server
 
 # Stage 2: Minimal runtime image with docker-cli & docker-compose
 FROM alpine:3.21
@@ -22,7 +22,7 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
-COPY --from=builder /pangolin-provision /app/pangolin-provision
+COPY --from=builder /pangolin-port-manager /app/pangolin-port-manager
 
 # Default volumes
 # /data: JSON store (ports.json)
@@ -41,4 +41,4 @@ ENV PORT=8080 \
 
 EXPOSE 8080
 
-ENTRYPOINT ["/app/pangolin-provision"]
+ENTRYPOINT ["/app/pangolin-port-manager"]

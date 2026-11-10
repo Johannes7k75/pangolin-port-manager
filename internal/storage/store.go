@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"pangolin-provision/internal/models"
+	"pangolin-port-manager/internal/models"
 )
 
 var (

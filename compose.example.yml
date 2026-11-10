@@ -62,10 +62,10 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
 
-  # Pangolin Port Provisioner (This Service)
-  pangolin-provision:
+  # Pangolin Port Manager (This Service)
+  pangolin-port-manager:
     build: .
-    container_name: pangolin-provision
+    container_name: pangolin-port-manager
     restart: unless-stopped
     environment:
       - PORT=8080
@@ -81,13 +81,13 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     labels:
       - "traefik.enable=true"
-      # Expose provisioner web UI via Traefik & Pangolin auth:
-      - "traefik.http.routers.provisioner.rule=Host(`ports.yourdomain.com`)"
-      - "traefik.http.routers.provisioner.entrypoints=websecure"
-      - "traefik.http.routers.provisioner.tls.certresolver=letsencrypt"
-      - "traefik.http.services.provisioner.loadbalancer.server.port=8080"
+      # Expose port manager web UI via Traefik & Pangolin auth:
+      - "traefik.http.routers.portmanager.rule=Host(`ports.yourdomain.com`)"
+      - "traefik.http.routers.portmanager.entrypoints=websecure"
+      - "traefik.http.routers.portmanager.tls.certresolver=letsencrypt"
+      - "traefik.http.services.portmanager.loadbalancer.server.port=8080"
       # Attach Pangolin authentication forward-auth middleware if configured:
-      # - "traefik.http.routers.provisioner.middlewares=pangolin-auth@docker"
+      # - "traefik.http.routers.portmanager.middlewares=pangolin-auth@docker"
 
 networks:
   default:

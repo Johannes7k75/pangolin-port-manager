@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"pangolin-provision/internal/config"
-	"pangolin-provision/internal/models"
+	"pangolin-port-manager/internal/config"
+	"pangolin-port-manager/internal/models"
 )
 
 type ApplyResult struct {
@@ -100,7 +100,7 @@ func (c *Client) resolveHostProjectDir(ctx context.Context, dockerBin string) st
 	if hn, err := os.Hostname(); err == nil && hn != "" {
 		candidates = append(candidates, hn)
 	}
-	candidates = append(candidates, "pangolin-provision")
+	candidates = append(candidates, "pangolin-port-manager", "pangolin-provision")
 
 	tmpl := fmt.Sprintf(`{{range .Mounts}}{{if eq .Destination %q}}{{.Source}}{{end}}{{end}}`, absProjectDir)
 	var hostSource string
