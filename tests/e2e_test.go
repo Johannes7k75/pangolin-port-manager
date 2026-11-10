@@ -244,8 +244,11 @@ func TestE2E_JSONAPI(t *testing.T) {
 }
 
 func TestE2E_BrowserPlaywright(t *testing.T) {
-	if _, err := os.Stat("/usr/bin/chromium"); os.IsNotExist(err) {
-		t.Skip("Skipping Playwright test: /usr/bin/chromium not installed")
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("Skipping Playwright test: python3 not found")
+	}
+	if err := exec.Command("python3", "-c", "import playwright").Run(); err != nil {
+		t.Skip("Skipping Playwright test: python playwright module not installed")
 	}
 
 	_, _, _, _, server := setupMockEnvironment(t)
