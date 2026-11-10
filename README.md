@@ -135,6 +135,23 @@ volumes:
 
 ---
 
+## 📦 Docker Image & CI/CD
+
+Pre-built multi-arch (`linux/amd64`, `linux/arm64`) images are built and published to GitHub Container Registry (GHCR) automatically via GitHub Actions:
+
+```yaml
+services:
+  pangolin-provision:
+    image: ghcr.io/<your-github-username>/pangolin-provision:latest
+```
+
+The GitHub Actions workflow [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml):
+1. Runs all unit and integration tests.
+2. Builds multi-architecture images natively for `amd64` and `arm64` using Docker Buildx and Go cross-compilation.
+3. Automatically publishes tags on `main` branch pushes and semantic version Git tags (`v1.0.0`).
+
+---
+
 ## 🧪 Testing
 
 Run all unit and E2E tests:
