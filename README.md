@@ -1,44 +1,53 @@
 # Pangolin Port Manager
 
-A lightweight Go microservice with an embedded Web UI (HTMX + custom dark mode aesthetic matching Pangolin) designed to sit behind Pangolin authentication to manage raw TCP/UDP port exposure on Gerbil and Traefik entrypoints.
+[![Build Status](https://github.com/Johannes7k75/pangolin-port-manager/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/Johannes7k75/pangolin-port-manager/actions/workflows/docker-publish.yml)
+[![Container](https://img.shields.io/badge/GHCR-docker%20image-blue?logo=docker)](https://github.com/Johannes7k75/pangolin-port-manager/pkgs/container/pangolin-port-manager)
+[![Go Version](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go)](https://golang.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+A lightweight companion service for [Pangolin](https://github.com/fosrl/pangolin) stacks that dynamically manages raw TCP and UDP port exposure on Gerbil exit nodes and provisions matching Traefik entrypoints with zero manual Compose edits.
 
 ---
 
-## ⚡ Why This Exists & How It Works
+## Overview
 
-In a Pangolin stack, Traefik shares Gerbil's network stack via `network_mode: service:gerbil`. Because Docker prevents containers with shared network modes from exposing ports directly:
-1. **All host port forwards must be defined on Gerbil** (`ports: ["25565:25565/tcp"]`).
-2. **Traefik requires static CLI flags or entrypoints** to bind listeners to those ports (`--entryPoints.tcp-25565.address=:25565/tcp`).
+In a standard Pangolin deployment, Traefik shares the Gerbil WireGuard gateway's network namespace (`network_mode: service:gerbil`). Because Docker does not allow containers using a shared network stack to publish ports directly:
 
-Pangolin Port Manager automates this workflow:
-- Provides a clean, responsive dark-mode Web UI to manage your TCP and UDP ports.
-- Generates an isolated compose override file (`docker-compose.ports.yml`).
-- Automatically detects drift between your configured rules and the applied compose file.
-- Provides a one-click **"Apply Changes & Restart Traefik"** action that recreates `gerbil` and `traefik` with `--no-deps` via the Docker socket, without restarting the rest of your stack.
+1. **Host Port Bindings** must be declared exclusively on the `gerbil` gateway container (`ports: ["25565:25565/tcp"]`).
+2. **Traefik Listeners** require corresponding CLI entrypoint flags to accept raw TCP/UDP streams (`--entryPoints.tcp-25565.address=:25565/tcp`).
 
-```mermaid
-flowchart TD
-    User["Web Browser (Behind Pangolin Auth)"] -->|Add / Edit / Toggle / Delete Port| Provisioner["Pangolin Port Manager (:8080)"]
-    Provisioner -->|Generates & Writes| ComposeOverride["docker-compose.ports.yml"]
-    Provisioner -->|Click Apply| DockerSocket["/var/run/docker.sock"]
-    DockerSocket -->|Recreates --no-deps| Gerbil["gerbil (ports: 25565:25565/tcp)"]
-    DockerSocket -->|Recreates --no-deps| Traefik["traefik (--entryPoints.tcp-25565.address=:25565/tcp)"]
-```
+Pangolin Port Manager automates this entire lifecycle:
+- Provides an embedded, zero-dependency Web UI designed to sit seamlessly behind Pangolin authentication.
+- Maintains a persistent store of TCP and UDP port allocations with custom names, protocols, and enable/disable toggles.
+- Generates a declarative Compose override file (`docker-compose.ports.yml`).
+- Automatically detects configuration drift between desired state and running containers.
+- Recreates only the gateway services (`gerbil` and `traefik`) with `--no-deps` via the Docker socket without disrupting the rest of the stack.
 
 ---
 
-## 🚀 Quick Start
+## Features
 
-### 1. Add `pangolin-port-manager` to your `compose.yml`
+- **Embedded Web Dashboard**: Fast, lightweight UI built with Go templates, HTMX, and a clean dark theme matching Pangolin's native aesthetic.
+- **Full Port Lifecycle**: Create, edit, toggle, and delete port allocations with immediate live YAML preview.
+- **Drift Detection**: Highlights when active running containers differ from configured rules and provides a one-click apply action.
+- **Graceful Async Recreation**: Recreates containers in the background with auto-polling status banners, avoiding gateway timeout resets when applied through Traefik.
+- **Host Path Detection**: Automatically discovers the container's host project directory via Docker inspection to preserve relative bind mounts (e.g. `./config:/var/config`).
+- **RESTful API**: Clean JSON endpoints for external automation and scripts.
 
-In your Pangolin stack's compose file (e.g., `compose.yml` or `compose.example.yml`), add the `pangolin-port-manager` service:
+---
+
+## Quick Start
+
+### Docker Compose
+
+Add `pangolin-port-manager` to your existing Pangolin `compose.yml`:
 
 ```yaml
 services:
-  # ... your existing pangolin, gerbil, and traefik services ...
+  # ... existing pangolin, gerbil, and traefik services ...
 
   pangolin-port-manager:
-    build: . # or image: ghcr.io/your-user/pangolin-port-manager:latest
+    image: ghcr.io/johannes7k75/pangolin-port-manager:latest
     container_name: pangolin-port-manager
     restart: unless-stopped
     environment:
@@ -55,56 +64,73 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.provisioner.rule=Host(`ports.yourdomain.com`)"
-      - "traefik.http.routers.provisioner.entrypoints=websecure"
-      - "traefik.http.routers.provisioner.tls.certresolver=letsencrypt"
-      - "traefik.http.services.provisioner.loadbalancer.server.port=8080"
+      - "traefik.http.routers.portmanager.rule=Host(`ports.yourdomain.com`)"
+      - "traefik.http.routers.portmanager.entrypoints=websecure"
+      - "traefik.http.routers.portmanager.tls.certresolver=letsencrypt"
+      - "traefik.http.services.portmanager.loadbalancer.server.port=8080"
 ```
 
-> **Note on Compose V2**: We recommend passing multiple compose files via `COMPOSE_FILES=compose.yml,docker-compose.ports.yml` rather than using the top-level `include:` directive in your base compose file, which can cause resource conflict warnings in Docker Compose when both files define the same services (`gerbil` and `traefik`).
-
-### 2. Start the Stack
+Start your stack:
 
 ```bash
-docker compose -f compose.yml -f docker-compose.ports.yml up -d --build
+docker compose -f compose.yml -f docker-compose.ports.yml up -d
 ```
 
-Access the dashboard at `https://ports.yourdomain.com` (or `http://localhost:8080` if accessing locally).
+Access the dashboard at `https://ports.yourdomain.com` (or `http://localhost:8080` locally).
 
 ---
 
-## 📁 Understanding Volume Mounts
+## Volume Configuration
 
-```yaml
-volumes:
-  - ./data/provisioner:/data
-  - .:/compose
-  - /var/run/docker.sock:/var/run/docker.sock
+The service uses three volume mounts:
+
+| Mount | Purpose |
+|---|---|
+| `./data/provisioner:/data` | Persistent store for configured port rules (`ports.json`). |
+| `.:/compose` | Allows the container's internal Compose CLI to read the base configuration and write `docker-compose.ports.yml`. |
+| `/var/run/docker.sock:/var/run/docker.sock` | Docker daemon socket used to trigger container recreation (`up -d --no-deps gerbil traefik`). |
+
+### Least-Privilege Setup
+
+To avoid mounting the entire project root directory into the container, you can mount only the specific compose files:
+
+```bash
+# Ensure the override file exists before starting
+touch docker-compose.ports.yml
 ```
 
-### Why `./data/provisioner:/data`?
-Persists the application state (`ports.json`) containing your port definitions, names, protocols, and enabled/disabled states across container rebuilds.
-
-### Why `.:/compose`?
-The `docker compose` CLI runs **inside** the `pangolin-port-manager` container and communicates with the host's Docker daemon via `/var/run/docker.sock`. 
-1. **Reading the Base Config**: The CLI inside the container needs to read `compose.yml` to know how `gerbil` and `traefik` are configured.
-2. **Writing the Override**: The provisioner needs to write `docker-compose.ports.yml` to the directory on the host so both the container and future host commands can access it.
-3. **Resolving Relative Paths**: When Docker Compose recreates `gerbil`, it resolves relative volume paths (like `./config:/var/config`). `pangolin-port-manager` automatically inspects its own mounts to detect your host project path and preserves correct host path resolution.
-
-#### Prefer not to mount the whole `.` directory?
-If you want to restrict container filesystem access, you can mount only a dedicated subfolder or specific files:
 ```yaml
-volumes:
-  - ./data/provisioner:/data
-  - ./compose.yml:/compose/compose.yml:ro
-  - ./docker-compose.ports.yml:/compose/docker-compose.ports.yml
-  - /var/run/docker.sock:/var/run/docker.sock
+    volumes:
+      - ./data/provisioner:/data
+      - ./compose.yml:/compose/compose.yml:ro
+      - ./docker-compose.ports.yml:/compose/docker-compose.ports.yml
+      - /var/run/docker.sock:/var/run/docker.sock
 ```
-*(Ensure `touch docker-compose.ports.yml` exists on the host before running, otherwise Docker will create it as a directory).*
 
 ---
 
-## ⚙️ Environment Variables
+## Generated Override Example
+
+When port rules are defined (e.g. Minecraft on port `25565/tcp`), the service writes `docker-compose.ports.yml`:
+
+```yaml
+# Generated by Pangolin Port Manager. DO NOT EDIT DIRECTLY.
+services:
+  gerbil:
+    ports:
+      - "25565:25565/tcp"
+
+  traefik:
+    command:
+      - "--configFile=/etc/traefik/traefik_config.yml"
+      - "--api.insecure=true"
+      - "--api.dashboard=true"
+      - "--entryPoints.tcp-25565.address=:25565/tcp"
+```
+
+---
+
+## Environment Variables
 
 | Variable | Default | Description |
 |---|---|---|
@@ -112,56 +138,61 @@ volumes:
 | `DATA_DIR` | `./data` | Directory for persistent storage (`ports.json`) |
 | `PORTS_FILE_PATH` | `./data/ports.json` | Explicit path to the ports JSON file |
 | `COMPOSE_PROJECT_DIR` | `/compose` | Project directory for `docker compose` commands |
-| `COMPOSE_OUT_PATH` | `./docker-compose.ports.yml` | Output path for generated compose override file |
-| `COMPOSE_FILES` | `compose.example.yml,docker-compose.ports.yml` | Comma-separated list of compose files passed with `-f` |
-| `GERBIL_SERVICE_NAME` | `gerbil` | Name of the Gerbil service in your compose file |
-| `TRAEFIK_SERVICE_NAME` | `traefik` | Name of the Traefik service in your compose file |
+| `COMPOSE_OUT_PATH` | `./docker-compose.ports.yml` | Output path for the generated Compose override file |
+| `COMPOSE_FILES` | `compose.yml,docker-compose.ports.yml` | Comma-separated list of compose files passed with `-f` |
+| `GERBIL_SERVICE_NAME` | `gerbil` | Name of the Gerbil service in your Compose configuration |
+| `TRAEFIK_SERVICE_NAME` | `traefik` | Name of the Traefik service in your Compose configuration |
 | `TRAEFIK_BASE_COMMANDS` | `--configFile=...,--api.insecure=true...` | Base static Traefik CLI arguments to preserve |
 
 ---
 
-## 🛠️ API Reference
+## REST API Reference
 
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/` | Web UI Dashboard |
-| `GET` | `/healthz` | Health check (`200 OK`) |
-| `GET` | `/api/ports` | List all configured port rules (JSON) |
+| `GET` | `/healthz` | Health check endpoint (`200 OK`) |
+| `GET` | `/api/ports` | List all configured port rules as JSON |
 | `POST` | `/api/ports` | Create a new port rule (`{ "name": "Minecraft", "port": 25565, "protocol": "tcp", "enabled": true }`) |
 | `PUT` | `/api/ports/{id}` | Update an existing rule's name, port, protocol, or state |
 | `POST` | `/api/ports/{id}/toggle` | Toggle rule enabled/disabled state |
 | `DELETE` | `/api/ports/{id}` | Delete a port rule |
-| `POST` | `/api/apply` | Generate compose override and trigger container recreation |
+| `POST` | `/api/apply` | Generate Compose override and trigger container recreation |
 
 ---
 
-## 📦 Docker Image & CI/CD
+## Development & Testing
 
-Pre-built multi-arch (`linux/amd64`, `linux/arm64`) images are built and published to GitHub Container Registry (GHCR) automatically via GitHub Actions:
+### Running Tests
 
-```yaml
-services:
-  pangolin-port-manager:
-    image: ghcr.io/<your-github-username>/pangolin-port-manager:latest
-```
-
-The GitHub Actions workflow [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml):
-1. Runs all unit and integration tests.
-2. Builds multi-architecture images natively for `amd64` and `arm64` using Docker Buildx and Go cross-compilation.
-3. Automatically publishes tags on `main` branch pushes and semantic version Git tags (`v1.0.0`).
-
----
-
-## 🧪 Testing
-
-Run all unit and E2E tests:
+Run the full Go test suite:
 
 ```bash
 go test -v ./...
 ```
 
-Run Playwright browser integration tests:
+Run end-to-end browser tests via Playwright:
 
 ```bash
 python3 -m unittest tests/playwright_e2e.py
 ```
+
+### Building Locally
+
+Build the Go binary:
+
+```bash
+go build -o bin/pangolin-port-manager ./cmd/server
+```
+
+Build the container image:
+
+```bash
+docker build -t pangolin-port-manager .
+```
+
+---
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
