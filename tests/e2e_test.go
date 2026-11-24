@@ -49,14 +49,20 @@ services:
 		t.Fatalf("Failed to write mock compose file: %v", err)
 	}
 
+	staticPath := filepath.Join(tempDir, "config", "traefik", "traefik_config.yml")
+	if err := os.MkdirAll(filepath.Dir(staticPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(staticPath, []byte("entryPoints:\n  web:\n    address: ':80'\napi:\n  dashboard: true\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
 	// 2. Create a mock `docker` CLI script that translates `up -d ...` into real `docker compose ... config`
 	// so every Apply validates the real merged YAML via Docker Compose without requiring a live daemon socket.
 	mockDockerPath := filepath.Join(tempDir, "mock-docker.sh")
 	mockScript := `#!/usr/bin/env bash
 set -e
-if [ "$1" = "inspect" ]; then
-  exit 1
-fi
+if [ "$1" = "inspect" ]; then exit 1; fi
 args=()
 for arg in "$@"; do
   if [ "$arg" = "up" ]; then
@@ -87,6 +93,7 @@ echo "Container pp-traefik Recreated"
 		TraefikServiceName: "traefik",
 		DockerBin:          mockDockerPath,
 	}
+
 	cfg.ReloadTraefikBaseCommands()
 
 	store, err := storage.NewStore(portsFilePath)

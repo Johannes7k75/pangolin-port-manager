@@ -48,9 +48,7 @@ services:
         condition: service_healthy
     command:
       - --configFile=/etc/traefik/traefik_config.yml
-      - --api.insecure=true
-      - --api.dashboard=true
-      # Dynamic entryPoints flags are injected here by docker-compose.ports.yml
+      # The override mounts a generated static YAML containing managed entry points.
     environment:
       - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN:-}
     volumes:
@@ -74,6 +72,8 @@ services:
       - COMPOSE_FILES=compose.example.yml,docker-compose.yml,compose.yml,docker-compose.ports.yml
       - GERBIL_SERVICE_NAME=gerbil
       - TRAEFIK_SERVICE_NAME=traefik
+      - TRAEFIK_STATIC_CONFIG_PATH=/compose/config/traefik/traefik_config.yml
+      - TRAEFIK_API_URL=http://gerbil:8080
     volumes:
       - ./data/provisioner:/data
       - .:/compose

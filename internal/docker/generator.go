@@ -44,9 +44,24 @@ func GenerateComposeYAML(rules []models.PortRule, cfg *config.Config) string {
 
 	b.WriteString("\n")
 
-	// Traefik Service (EntryPoints command flags)
+	// Traefik uses a single static configuration source.
 	b.WriteString(fmt.Sprintf("  %s:\n", cfg.TraefikServiceName))
 	b.WriteString("    command:\n")
+	if usesStaticFile(cfg) {
+		b.WriteString("      - \"--configFile=/etc/traefik/port-manager-static.yml\"\n")
+		b.WriteString("    volumes:\n")
+		b.WriteString("      - type: bind\n")
+		projectDir, _ := filepath.Abs(cfg.ComposeProjectDir)
+		outputPath, _ := filepath.Abs(cfg.ComposeOutPath + ".traefik.yml")
+		relativePath, err := filepath.Rel(projectDir, outputPath)
+		source := "./" + filepath.ToSlash(relativePath)
+		if err != nil {
+			source = filepath.ToSlash(outputPath)
+		}
+		b.WriteString(fmt.Sprintf("        source: %q\n", source))
+		b.WriteString("        target: /etc/traefik/port-manager-static.yml\n        read_only: true\n")
+		return b.String()
+	}
 	for _, cmd := range cfg.TraefikBaseCommands {
 		b.WriteString(fmt.Sprintf("      - %q\n", cmd))
 	}
@@ -61,6 +76,15 @@ func GenerateComposeYAML(rules []models.PortRule, cfg *config.Config) string {
 
 // WriteComposeFile atomically writes the generated compose content to the target path
 func WriteComposeFile(rules []models.PortRule, cfg *config.Config) error {
+	if usesStaticFile(cfg) {
+		content, err := generateStaticConfig(rules, cfg)
+		if err != nil {
+			return err
+		}
+		if err := writeAtomic(cfg.ComposeOutPath+".traefik.yml", content, 0600); err != nil {
+			return err
+		}
+	}
 	content := GenerateComposeYAML(rules, cfg)
 	targetPath := cfg.ComposeOutPath
 
@@ -80,6 +104,16 @@ func WriteComposeFile(rules []models.PortRule, cfg *config.Config) error {
 // HasPendingChanges compares the current file on disk with the expected generated YAML
 func HasPendingChanges(rules []models.PortRule, cfg *config.Config) bool {
 	cfg.ReloadTraefikBaseCommands()
+	if usesStaticFile(cfg) {
+		expected, err := generateStaticConfig(rules, cfg)
+		if err != nil {
+			return true
+		}
+		existing, err := os.ReadFile(cfg.ComposeOutPath + ".traefik.yml")
+		if err != nil || string(existing) != string(expected) {
+			return true
+		}
+	}
 	existing, err := os.ReadFile(cfg.ComposeOutPath)
 	if err != nil {
 		// File does not exist yet; if there are rules (or even defaults), treat as pending

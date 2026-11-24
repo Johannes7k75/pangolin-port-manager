@@ -14,7 +14,7 @@ func TestGenerateComposeYAML(t *testing.T) {
 	cfg := &config.Config{
 		GerbilServiceName:   "gerbil",
 		TraefikServiceName:  "traefik",
-		TraefikBaseCommands: []string{"--configFile=/etc/traefik/traefik_config.yml", "--api.dashboard=true"},
+		TraefikBaseCommands: []string{"--api.dashboard=true"},
 	}
 
 	rules := []models.PortRule{
@@ -62,7 +62,7 @@ func TestGenerateComposeYAML(t *testing.T) {
 		t.Errorf("Expected udp-9987 entrypoint on traefik, got:\n%s", yaml)
 	}
 	// Check base commands
-	if !strings.Contains(yaml, "\"--configFile=/etc/traefik/traefik_config.yml\"") {
+	if !strings.Contains(yaml, "\"--api.dashboard=true\"") {
 		t.Errorf("Expected base command preserved, got:\n%s", yaml)
 	}
 }

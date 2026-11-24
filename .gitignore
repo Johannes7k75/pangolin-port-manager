@@ -5,3 +5,5 @@ docker-compose.ports.yml
 .DS_Store
 /config/
 *.log
+
+/docker-compose.ports.yml.traefik.yml

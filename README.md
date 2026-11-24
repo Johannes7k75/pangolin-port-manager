@@ -14,13 +14,13 @@ A lightweight companion service for [Pangolin](https://github.com/fosrl/pangolin
 In a standard Pangolin deployment, Traefik shares the Gerbil WireGuard gateway's network namespace (`network_mode: service:gerbil`). Because Docker does not allow containers using a shared network stack to publish ports directly:
 
 1. **Host Port Bindings** must be declared exclusively on the `gerbil` gateway container (`ports: ["25565:25565/tcp"]`).
-2. **Traefik Listeners** require corresponding CLI entrypoint flags to accept raw TCP/UDP streams (`--entryPoints.tcp-25565.address=:25565/tcp`).
+2. **Traefik Listeners** require matching entry points in the static configuration used at startup. With `--configFile`, these must be defined in that file; CLI-only deployments use entry-point flags.
 
 Pangolin Port Manager automates this entire lifecycle:
 - Provides an embedded, zero-dependency Web UI designed to sit seamlessly behind Pangolin authentication.
 - Maintains a persistent store of TCP and UDP port allocations with custom names, protocols, and enable/disable toggles.
 - Generates a declarative Compose override file (`docker-compose.ports.yml`).
-- Automatically detects configuration drift between desired state and running containers.
+- Detects drift between desired rules and generated files, including changes to the source Traefik configuration.
 - Recreates only the gateway services (`gerbil` and `traefik`) with `--no-deps` via the Docker socket without disrupting the rest of the stack.
 
 ---
@@ -29,7 +29,7 @@ Pangolin Port Manager automates this entire lifecycle:
 
 - **Embedded Web Dashboard**: Fast, lightweight UI built with Go templates, HTMX, and a clean dark theme matching Pangolin's native aesthetic.
 - **Full Port Lifecycle**: Create, edit, toggle, and delete port allocations with immediate live YAML preview.
-- **Drift Detection**: Highlights when active running containers differ from configured rules and provides a one-click apply action.
+- **Drift Detection**: Highlights when generated configuration files differ from configured rules and provides a one-click apply action. Optional Traefik API verification checks runtime entry points after applying.
 - **Graceful Async Recreation**: Recreates containers in the background with auto-polling status banners, avoiding gateway timeout resets when applied through Traefik.
 - **Host Path Detection**: Automatically discovers the container's host project directory via Docker inspection to preserve relative bind mounts (e.g. `./config:/var/config`).
 - **RESTful API**: Clean JSON endpoints for external automation and scripts.
@@ -57,6 +57,7 @@ services:
       - COMPOSE_FILES=compose.yml,docker-compose.ports.yml
       - GERBIL_SERVICE_NAME=gerbil
       - TRAEFIK_SERVICE_NAME=traefik
+      - TRAEFIK_STATIC_CONFIG_PATH=/compose/config/traefik/traefik_config.yml
     volumes:
       - ./data/provisioner:/data
       - .:/compose
@@ -69,7 +70,7 @@ services:
       - "traefik.http.services.portmanager.loadbalancer.server.port=8080"
 ```
 
-Start your stack:
+Start the manager with `docker compose -f compose.yml up -d pangolin-port-manager`, add rules in the dashboard, then click **Apply changes**. Apply generates the files and recreates Gerbil and Traefik. For subsequent manual stack operations, include the generated override:
 
 ```bash
 docker compose -f compose.yml -f docker-compose.ports.yml up -d
@@ -89,22 +90,11 @@ The service uses three volume mounts:
 | `.:/compose` | Allows the container's internal Compose CLI to read the base configuration and write `docker-compose.ports.yml`. |
 | `/var/run/docker.sock:/var/run/docker.sock` | Docker daemon socket used to trigger container recreation (`up -d --no-deps gerbil traefik`). |
 
-### Least-Privilege Setup
+### Static Configuration Access
 
-To avoid mounting the entire project root directory into the container, you can mount only the specific compose files:
+Mount the project directory for generated files and the source static YAML read-only at a separate path. Set `TRAEFIK_STATIC_CONFIG_PATH` to that path. The manager writes the generated static YAML beside the Compose override, so that directory must be writable and visible to the host Docker daemon. Mounting only the override file is insufficient: atomic writes replace files and Apply also creates a second file.
 
-```bash
-# Ensure the override file exists before starting
-touch docker-compose.ports.yml
-```
-
-```yaml
-    volumes:
-      - ./data/provisioner:/data
-      - ./compose.yml:/compose/compose.yml:ro
-      - ./docker-compose.ports.yml:/compose/docker-compose.ports.yml
-      - /var/run/docker.sock:/var/run/docker.sock
-```
+For custom project layouts, set `TRAEFIK_STATIC_CONFIG_PATH` explicitly to the original YAML file as seen inside the manager container. The default is `config/traefik/traefik_config.yml` under `COMPOSE_PROJECT_DIR`. Keep `COMPOSE_OUT_PATH` in the mounted project directory.
 
 ---
 
@@ -121,11 +111,28 @@ services:
 
   traefik:
     command:
-      - "--configFile=/etc/traefik/traefik_config.yml"
-      - "--api.insecure=true"
-      - "--api.dashboard=true"
-      - "--entryPoints.tcp-25565.address=:25565/tcp"
+      - "--configFile=/etc/traefik/port-manager-static.yml"
+    volumes:
+      - type: bind
+        source: "./docker-compose.ports.yml.traefik.yml"
+        target: /etc/traefik/port-manager-static.yml
+        read_only: true
 ```
+
+The adjacent `docker-compose.ports.yml.traefik.yml` contains the original static YAML settings plus:
+
+```yaml
+entryPoints:
+  # Existing entry points and their options are retained.
+  tcp-25565:
+    address: ":25565/tcp"
+```
+
+Every Apply rebuilds this file from the original YAML. Disabling or deleting a rule removes its generated entry point. Entry points already present in the original file remain administrator-owned; a conflicting address causes Apply to fail. The original file is never modified. Malformed or missing source YAML also causes Apply to fail before container recreation. TOML sources must be converted to YAML first.
+
+Traefik's file, CLI, and environment static configuration methods are [mutually exclusive](https://doc.traefik.io/traefik/getting-started/configuration-overview/#the-install-configuration). In file mode, the generated command contains only `--configFile`; move any other static settings from the base Compose command into the original YAML (including `api.dashboard` and `api.insecure` if needed). Existing providers, certificates, plugins, and web entry points are carried into the generated file. The base command is automatically read from the Traefik service in the original Compose file. CLI-only deployments without `--configFile` continue to receive managed entry-point flags.
+
+To verify loaded listeners after Apply, set `TRAEFIK_API_URL` to the reachable Traefik API origin, for example `http://gerbil:8080` when the existing configuration exposes an internal insecure API. The manager polls `/api/entrypoints` for up to 15 seconds and fails Apply if any enabled rule's name or address is missing. No API is enabled or published automatically. With this variable unset, Apply checks Compose execution only and reports that runtime entry points were not verified. API verification checks listeners; it does not verify Pangolin router status or external connectivity.
 
 ---
 
@@ -140,7 +147,9 @@ services:
 | `COMPOSE_OUT_PATH` | `./docker-compose.ports.yml` | Output path for the generated Compose override file |
 | `COMPOSE_FILES` | `compose.yml,docker-compose.ports.yml` | Comma-separated list of compose files passed with `-f` |
 | `GERBIL_SERVICE_NAME` | `gerbil` | Name of the Gerbil service in your Compose configuration |
-| `TRAEFIK_SERVICE_NAME` | `traefik` | Name of the Traefik service in your Compose configuration (base command arguments are automatically extracted from your base compose file) |
+| `TRAEFIK_SERVICE_NAME` | `traefik` | Name of the Traefik service in your Compose configuration |
+| `TRAEFIK_STATIC_CONFIG_PATH` | `<COMPOSE_PROJECT_DIR>/config/traefik/traefik_config.yml` | Original static YAML path inside the manager; used in file mode |
+| `TRAEFIK_API_URL` | unset | Traefik API origin for runtime entry-point verification after Apply |
 
 ---
 

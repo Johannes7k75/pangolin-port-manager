@@ -2,4 +2,4 @@ module pangolin-port-manager
 
 go 1.24
 
-require gopkg.in/yaml.v3 v3.0.1 // indirect
+require go.yaml.in/yaml/v3 v3.0.4

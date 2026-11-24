@@ -7,20 +7,22 @@ import (
 	"path/filepath"
 	"strings"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 type Config struct {
-	Port                string
-	DataDir             string
-	PortsFilePath       string
-	ComposeOutPath      string
-	ComposeProjectDir   string
-	ComposeFiles        []string
-	GerbilServiceName   string
-	TraefikServiceName  string
-	TraefikBaseCommands []string
-	DockerBin           string
+	Port                    string
+	DataDir                 string
+	PortsFilePath           string
+	ComposeOutPath          string
+	ComposeProjectDir       string
+	ComposeFiles            []string
+	GerbilServiceName       string
+	TraefikServiceName      string
+	TraefikBaseCommands     []string
+	TraefikStaticConfigPath string
+	TraefikAPIURL           string
+	DockerBin               string
 }
 
 func getEnvOrDefault(key, fallback string) string {
@@ -32,8 +34,6 @@ func getEnvOrDefault(key, fallback string) string {
 
 var defaultTraefikBaseCommands = []string{
 	"--configFile=/etc/traefik/traefik_config.yml",
-	"--api.insecure=true",
-	"--api.dashboard=true",
 }
 
 // FindBaseComposeFile searches for the main compose file within projectDir or according to composeFiles,
@@ -208,16 +208,18 @@ func Load() *Config {
 	traefikService := getEnvOrDefault("TRAEFIK_SERVICE_NAME", "traefik")
 
 	cfg := &Config{
-		Port:                getEnvOrDefault("PORT", "8080"),
-		DataDir:             getEnvOrDefault("DATA_DIR", "./data"),
-		PortsFilePath:       getEnvOrDefault("PORTS_FILE_PATH", "./data/ports.json"),
-		ComposeOutPath:      outPath,
-		ComposeProjectDir:   projectDir,
-		ComposeFiles:        composeFiles,
-		GerbilServiceName:   getEnvOrDefault("GERBIL_SERVICE_NAME", "gerbil"),
-		TraefikServiceName:  traefikService,
-		TraefikBaseCommands: defaultTraefikBaseCommands,
-		DockerBin:           getEnvOrDefault("DOCKER_BIN", "docker"),
+		Port:                    getEnvOrDefault("PORT", "8080"),
+		DataDir:                 getEnvOrDefault("DATA_DIR", "./data"),
+		PortsFilePath:           getEnvOrDefault("PORTS_FILE_PATH", "./data/ports.json"),
+		ComposeOutPath:          outPath,
+		ComposeProjectDir:       projectDir,
+		ComposeFiles:            composeFiles,
+		GerbilServiceName:       getEnvOrDefault("GERBIL_SERVICE_NAME", "gerbil"),
+		TraefikServiceName:      traefikService,
+		TraefikBaseCommands:     defaultTraefikBaseCommands,
+		TraefikStaticConfigPath: getEnvOrDefault("TRAEFIK_STATIC_CONFIG_PATH", ""),
+		TraefikAPIURL:           getEnvOrDefault("TRAEFIK_API_URL", ""),
+		DockerBin:               getEnvOrDefault("DOCKER_BIN", "docker"),
 	}
 
 	// Read base Traefik command from the base compose file

@@ -168,7 +168,7 @@ func (c *Client) resolveComposeFiles(effectiveProjectDir string) []string {
 	return found
 }
 
-func (c *Client) executeComposeRecreate(ctx context.Context) (*ApplyResult, error) {
+func (c *Client) executeComposeRecreate(ctx context.Context, rules []models.PortRule) (*ApplyResult, error) {
 	start := time.Now()
 	dockerBin := c.cfg.DockerBin
 	if dockerBin == "" {
@@ -228,6 +228,18 @@ func (c *Client) executeComposeRecreate(ctx context.Context) (*ApplyResult, erro
 	}
 
 	combinedOut := strings.TrimSpace(string(output) + "\n" + string(ensureOut))
+	if ensureErr != nil {
+		err := fmt.Errorf("ensure Traefik is running: %w", ensureErr)
+		return &ApplyResult{Output: combinedOut, AppliedAt: appliedAt, Error: err.Error()}, err
+	}
+	if err := c.verifyEntryPoints(ctx, rules); err != nil {
+		return &ApplyResult{Output: combinedOut, AppliedAt: appliedAt, Error: err.Error()}, err
+	}
+	if c.cfg.TraefikAPIURL == "" {
+		combinedOut += "\nRuntime entry points not verified (TRAEFIK_API_URL is unset)."
+	} else {
+		combinedOut += "\nTraefik runtime entry points verified."
+	}
 	log.Printf("[Docker] Apply succeeded in %s:\n%s", time.Since(start).Round(time.Millisecond), combinedOut)
 
 	res := &ApplyResult{
@@ -261,7 +273,7 @@ func (c *Client) Apply(ctx context.Context, rules []models.PortRule) (*ApplyResu
 	execCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	res, err := c.executeComposeRecreate(execCtx)
+	res, err := c.executeComposeRecreate(execCtx, rules)
 
 	c.mu.Lock()
 	c.lastResult = res
@@ -308,7 +320,7 @@ func (c *Client) StartApplyAsync(rules []models.PortRule, delay time.Duration) e
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 
-		res, _ := c.executeComposeRecreate(ctx)
+		res, _ := c.executeComposeRecreate(ctx, rules)
 
 		c.mu.Lock()
 		c.lastResult = res
