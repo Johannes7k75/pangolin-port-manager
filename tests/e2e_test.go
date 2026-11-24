@@ -215,6 +215,15 @@ func TestE2E_FullLifecycle(t *testing.T) {
 		t.Errorf("Merged compose config does not contain port 25565:\n%s", string(output))
 	}
 
+	staticPath := filepath.Join(tempDir, "config", "traefik", "traefik_config.yml")
+	staticData, err := os.ReadFile(staticPath)
+	if err != nil || !strings.Contains(string(staticData), "tcp-25565:") {
+		t.Fatalf("entry point missing from original static YAML: %s, %v", staticData, err)
+	}
+	if !strings.Contains(string(output), "--configFile=/etc/traefik/traefik_config.yml") || strings.Contains(string(output), "port-manager-static.yml") {
+		t.Fatalf("merged stack does not load original configuration: %s", output)
+	}
+
 	// 5. Delete Port Rule
 	delReq := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/ports/%s", ruleID), nil)
 	delReq.Header.Set("HX-Request", "true")

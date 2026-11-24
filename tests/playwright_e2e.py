@@ -25,6 +25,8 @@ def run_e2e(base_url: str, screenshot_dir: str = ""):
         # 2. Open Add Port Modal & create 25565/tcp ("Minecraft")
         page.click("#btn-open-add")
         expect(page.locator("#add-modal")).not_to_have_class("modal-overlay hidden")
+        # Wait for the modal's delayed autofocus before filling another field.
+        expect(page.locator("#add-name")).to_be_focused()
 
         page.fill("#add-name", "Minecraft")
         page.fill("#add-port", "25565")
@@ -49,6 +51,7 @@ def run_e2e(base_url: str, screenshot_dir: str = ""):
         # 3. Try creating a duplicate mapping (25565/tcp) -> Visual error MUST be displayed!
         page.click("#btn-open-add")
         expect(page.locator("#add-modal")).not_to_have_class("modal-overlay hidden")
+        expect(page.locator("#add-name")).to_be_focused()
         page.fill("#add-name", "Duplicate Server")
         page.fill("#add-port", "25565")
         page.select_option("#add-protocol", "tcp")

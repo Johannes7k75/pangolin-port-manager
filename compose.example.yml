@@ -48,7 +48,7 @@ services:
         condition: service_healthy
     command:
       - --configFile=/etc/traefik/traefik_config.yml
-      # The override mounts a generated static YAML containing managed entry points.
+      # Port Manager updates managed entry points directly in this static YAML.
     environment:
       - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN:-}
     volumes:

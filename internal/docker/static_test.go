@@ -62,10 +62,10 @@ api:
 	if strings.Contains(string(compose), "--entryPoints") || strings.Contains(string(compose), "--api.dashboard") {
 		t.Fatalf("mixed configuration sources:\n%s", compose)
 	}
-	if !strings.Contains(string(compose), "--configFile=/etc/traefik/port-manager-static.yml") || !strings.Contains(string(compose), "./ports.yml.traefik.yml") {
-		t.Fatalf("missing generated config mount:\n%s", compose)
+	if !strings.Contains(string(compose), "--configFile=/etc/traefik/custom.yml") || strings.Contains(string(compose), "volumes:") {
+		t.Fatalf("original config command not preserved:\n%s", compose)
 	}
-	generated, err := os.ReadFile(cfg.ComposeOutPath + ".traefik.yml")
+	generated, err := os.ReadFile(cfg.TraefikStaticConfigPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,9 +94,23 @@ api:
 	if string(want) != string(got) {
 		t.Fatalf("lost original settings:\n%s", got)
 	}
-	untouched, _ := os.ReadFile(cfg.TraefikStaticConfigPath)
-	if string(untouched) != source {
-		t.Fatal("original file was modified")
+	backup, _ := os.ReadFile(cfg.TraefikStaticConfigPath + ".port-manager.bak")
+	if string(backup) != source {
+		t.Fatal("backup did not preserve original bytes")
+	}
+	if !strings.Contains(string(generated), "# Original settings") {
+		t.Fatal("original comment lost")
+	}
+	if !strings.Contains(string(generated), managedEntryPointComment) {
+		t.Fatal("ownership marker missing")
+	}
+	first := string(generated)
+	if err := WriteComposeFile(rules, cfg); err != nil {
+		t.Fatal(err)
+	}
+	second, _ := os.ReadFile(cfg.TraefikStaticConfigPath)
+	if string(second) != first {
+		t.Fatal("repeated Apply rewrote configuration")
 	}
 	if HasPendingChanges(rules, cfg) {
 		t.Fatal("freshly generated files should match")
@@ -104,7 +118,7 @@ api:
 	if err := WriteComposeFile(nil, cfg); err != nil {
 		t.Fatal(err)
 	}
-	generated, _ = os.ReadFile(cfg.ComposeOutPath + ".traefik.yml")
+	generated, _ = os.ReadFile(cfg.TraefikStaticConfigPath)
 	if strings.Contains(string(generated), "tcp-25:") || strings.Contains(string(generated), "udp-9987:") {
 		t.Fatal("removed rules left stale entry points")
 	}
@@ -114,13 +128,13 @@ api:
 	if err := os.WriteFile(cfg.TraefikStaticConfigPath, []byte(source+"log:\n  level: DEBUG\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if !HasPendingChanges(nil, cfg) {
-		t.Fatal("source drift not detected")
+	if HasPendingChanges(nil, cfg) {
+		t.Fatal("unrelated manual edits should not need Apply")
 	}
 }
 
 func TestInvalidStaticConfigDoesNotOverwriteOutput(t *testing.T) {
-	for _, source := range []string{"[invalid", "", "entryPoints: []", "entryPoints: {}\nentryPoints: {}", "entryPoints:\n  tcp-25:\n    address: ':2525/tcp'"} {
+	for _, source := range []string{"[invalid", "", "entryPoints: {}\n---\nlog: {}", "entryPoints: []", "entryPoints: {}\nentryPoints: {}", "entryPoints:\n  tcp-25:\n    address: ':2525/tcp'"} {
 		t.Run(source, func(t *testing.T) {
 			cfg := fileConfig(t, source)
 			if err := os.WriteFile(cfg.ComposeOutPath, []byte("original override"), 0600); err != nil {
@@ -223,5 +237,136 @@ func TestApplyVerifiesRuntime(t *testing.T) {
 	res, err = client.executeComposeRecreate(ctx, rules)
 	if err == nil || res.Success || !strings.Contains(res.Error, "runtime verification failed") {
 		t.Fatalf("missing listener reported success: %+v, %v", res, err)
+	}
+}
+
+func TestManagedOwnershipAndManualEdits(t *testing.T) {
+	cfg := fileConfig(t, "entryPoints:\n  web:\n    address: ':80'\n")
+	rules := []models.PortRule{{Port: 25, Protocol: models.ProtocolTCP, Enabled: true}}
+	if err := WriteComposeFile(rules, cfg); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(cfg.TraefikStaticConfigPath)
+	// Administrators may customize managed listeners without losing their settings.
+	data = []byte(strings.Replace(string(data), "address: :25/tcp", "address: :25/tcp\n        proxyProtocol:\n            insecure: true", 1))
+	if err := os.WriteFile(cfg.TraefikStaticConfigPath, data, 0640); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteComposeFile(rules, cfg); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(cfg.TraefikStaticConfigPath)
+	if string(data) != string(got) {
+		t.Fatal("manual listener settings changed")
+	}
+	if !strings.Contains(string(got), "proxyProtocol:") {
+		t.Fatal("test did not add listener settings")
+	}
+	additional := append(append([]models.PortRule(nil), rules...), models.PortRule{Port: 993, Protocol: models.ProtocolTCP, Enabled: true})
+	if err := WriteComposeFile(additional, cfg); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = os.ReadFile(cfg.TraefikStaticConfigPath)
+	if !strings.Contains(string(got), "proxyProtocol:") {
+		t.Fatal("lost manual listener settings when adding another port")
+	}
+	// Changing a managed address must not lead to silent deletion or replacement.
+	modified := strings.Replace(string(got), ":25/tcp", ":2525/tcp", 1)
+	if err := os.WriteFile(cfg.TraefikStaticConfigPath, []byte(modified), 0640); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteComposeFile(nil, cfg); err == nil {
+		t.Fatal("manually changed managed address should fail")
+	}
+	got, _ = os.ReadFile(cfg.TraefikStaticConfigPath)
+	if string(got) != modified {
+		t.Fatal("changed file on conflict")
+	}
+	// Removing the marker explicitly transfers ownership to the administrator.
+	manual := strings.Replace(modified, managedEntryPointComment, "manually maintained", 1)
+	if err := os.WriteFile(cfg.TraefikStaticConfigPath, []byte(manual), 0640); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteComposeFile(nil, cfg); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = os.ReadFile(cfg.TraefikStaticConfigPath)
+	if !strings.Contains(string(got), "tcp-25:") || !strings.Contains(string(got), ":2525/tcp") || !strings.Contains(string(got), "proxyProtocol:") {
+		t.Fatal("deleted or changed unowned listener")
+	}
+	if strings.Contains(string(got), "tcp-993:") {
+		t.Fatal("did not remove remaining owned listener")
+	}
+}
+
+func TestStaticConfigPreservesPermissionsAndSymlink(t *testing.T) {
+	cfg := fileConfig(t, "entryPoints: {}\n")
+	target := cfg.TraefikStaticConfigPath
+	if err := os.Chmod(target, 0640); err != nil {
+		t.Fatal(err)
+	}
+	cfg.TraefikStaticConfigPath = filepath.Join(cfg.ComposeProjectDir, "link.yml")
+	if err := os.Symlink(target, cfg.TraefikStaticConfigPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteComposeFile([]models.PortRule{{Port: 25, Protocol: models.ProtocolTCP, Enabled: true}}, cfg); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Lstat(cfg.TraefikStaticConfigPath)
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatal("replaced configuration symlink")
+	}
+	info, err = os.Stat(target)
+	if err != nil || info.Mode().Perm() != 0640 {
+		t.Fatal("lost file permissions")
+	}
+}
+
+func TestMigrationFromSnapshot(t *testing.T) {
+	cfg := fileConfig(t, "entryPoints:\n  web:\n    address: ':80'\n")
+	legacy := []byte("services:\n  traefik:\n    command: ['--configFile=/etc/traefik/port-manager-static.yml']\n    volumes: ['./ports.yml.traefik.yml:/etc/traefik/port-manager-static.yml:ro']\n")
+	if err := os.WriteFile(cfg.ComposeOutPath, legacy, 0600); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := cfg.ComposeOutPath + ".traefik.yml"
+	if err := os.WriteFile(snapshot, []byte("entryPoints: {}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	rules := []models.PortRule{{Port: 993, Protocol: models.ProtocolTCP, Enabled: true}}
+	if !HasPendingChanges(rules, cfg) {
+		t.Fatal("migration should need Apply")
+	}
+	if err := WriteComposeFile(rules, cfg); err != nil {
+		t.Fatal(err)
+	}
+	override, _ := os.ReadFile(cfg.ComposeOutPath)
+	if strings.Contains(string(override), "port-manager-static.yml") || strings.Contains(string(override), "volumes:") {
+		t.Fatal("legacy mount retained")
+	}
+	source, _ := os.ReadFile(cfg.TraefikStaticConfigPath)
+	if !strings.Contains(string(source), "tcp-993:") {
+		t.Fatal("listener missing from original config")
+	}
+	if HasPendingChanges(rules, cfg) {
+		t.Fatal("migration not in sync")
+	}
+}
+
+func TestBackupFailureLeavesOriginalUntouched(t *testing.T) {
+	source := "entryPoints: {}\n"
+	cfg := fileConfig(t, source)
+	if err := os.Mkdir(cfg.TraefikStaticConfigPath+".port-manager.bak", 0700); err != nil {
+		t.Fatal(err)
+	}
+	err := WriteComposeFile([]models.PortRule{{Port: 25, Protocol: models.ProtocolTCP, Enabled: true}}, cfg)
+	if err == nil {
+		t.Fatal("expected backup error")
+	}
+	got, _ := os.ReadFile(cfg.TraefikStaticConfigPath)
+	if string(got) != source {
+		t.Fatal("changed source without backup")
+	}
+	if _, err := os.Stat(cfg.ComposeOutPath); !os.IsNotExist(err) {
+		t.Fatal("wrote override after failed backup")
 	}
 }

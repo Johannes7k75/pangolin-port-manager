@@ -7,3 +7,5 @@ docker-compose.ports.yml
 *.log
 
 /docker-compose.ports.yml.traefik.yml
+
+*.port-manager.bak

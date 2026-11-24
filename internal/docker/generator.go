@@ -48,18 +48,17 @@ func GenerateComposeYAML(rules []models.PortRule, cfg *config.Config) string {
 	b.WriteString(fmt.Sprintf("  %s:\n", cfg.TraefikServiceName))
 	b.WriteString("    command:\n")
 	if usesStaticFile(cfg) {
-		b.WriteString("      - \"--configFile=/etc/traefik/port-manager-static.yml\"\n")
-		b.WriteString("    volumes:\n")
-		b.WriteString("      - type: bind\n")
-		projectDir, _ := filepath.Abs(cfg.ComposeProjectDir)
-		outputPath, _ := filepath.Abs(cfg.ComposeOutPath + ".traefik.yml")
-		relativePath, err := filepath.Rel(projectDir, outputPath)
-		source := "./" + filepath.ToSlash(relativePath)
-		if err != nil {
-			source = filepath.ToSlash(outputPath)
+		// configFile is the only static CLI option when using file configuration.
+		for i, cmd := range cfg.TraefikBaseCommands {
+			if strings.HasPrefix(strings.ToLower(cmd), "--configfile=") {
+				b.WriteString(fmt.Sprintf("      - %q\n", cmd))
+				break
+			}
+			if strings.EqualFold(cmd, "--configFile") && i+1 < len(cfg.TraefikBaseCommands) {
+				b.WriteString(fmt.Sprintf("      - %q\n      - %q\n", cmd, cfg.TraefikBaseCommands[i+1]))
+				break
+			}
 		}
-		b.WriteString(fmt.Sprintf("        source: %q\n", source))
-		b.WriteString("        target: /etc/traefik/port-manager-static.yml\n        read_only: true\n")
 		return b.String()
 	}
 	for _, cmd := range cfg.TraefikBaseCommands {
@@ -77,11 +76,7 @@ func GenerateComposeYAML(rules []models.PortRule, cfg *config.Config) string {
 // WriteComposeFile atomically writes the generated compose content to the target path
 func WriteComposeFile(rules []models.PortRule, cfg *config.Config) error {
 	if usesStaticFile(cfg) {
-		content, err := generateStaticConfig(rules, cfg)
-		if err != nil {
-			return err
-		}
-		if err := writeAtomic(cfg.ComposeOutPath+".traefik.yml", content, 0600); err != nil {
+		if err := writeStaticConfig(rules, cfg); err != nil {
 			return err
 		}
 	}
@@ -105,12 +100,11 @@ func WriteComposeFile(rules []models.PortRule, cfg *config.Config) error {
 func HasPendingChanges(rules []models.PortRule, cfg *config.Config) bool {
 	cfg.ReloadTraefikBaseCommands()
 	if usesStaticFile(cfg) {
-		expected, err := generateStaticConfig(rules, cfg)
+		original, expected, err := planStaticConfig(rules, cfg)
 		if err != nil {
 			return true
 		}
-		existing, err := os.ReadFile(cfg.ComposeOutPath + ".traefik.yml")
-		if err != nil || string(existing) != string(expected) {
+		if string(original) != string(expected) {
 			return true
 		}
 	}
